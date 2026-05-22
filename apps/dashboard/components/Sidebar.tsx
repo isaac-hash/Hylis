@@ -1,7 +1,8 @@
 "use client";
 
-import { useState } from "react";
+import React, { useState } from "react";
 import Link from "next/link";
+import Image from "next/image";
 import { usePathname } from "next/navigation";
 import { useAuth } from "@/providers/auth.provider";
 
@@ -93,7 +94,14 @@ const ErrorIcon = () => (
     </svg>
 );
 
-const navItems = [
+type NavItem = {
+    name: string;
+    href: string;
+    icon: React.ReactNode;
+    badge?: string;
+};
+
+const navItems: NavItem[] = [
     { name: "Dashboard", href: "/dashboard", icon: <DashboardIcon /> },
     { name: "Stacks", href: "/stacks", icon: <StacksIcon /> },
     { name: "Templates", href: "/dashboard/templates", icon: <TemplatesIcon />, badge: "✨" },
@@ -137,7 +145,7 @@ export default function Sidebar({
                 <div className="p-6 flex items-center justify-between mb-4">
                     <Link href="/" className="flex items-center gap-3 group">
                         <div className="w-8 h-8 flex items-center justify-center group-hover:scale-105 transition-transform shrink-0">
-                            <img src="/Hylius-Logo-9.png" alt="Hylius Logo" className="w-full h-full object-contain" />
+                            <Image src="/Hylius-Logo-9.png" alt="Hylius Logo" width={32} height={32} className="w-full h-full object-contain" />
                         </div>
                         <span className={`font-display font-bold text-xl tracking-tight animate-reveal ${isCollapsed ? "md:hidden" : "block"}`}>
                             Hylius
@@ -167,7 +175,7 @@ export default function Sidebar({
                 </div>
 
                 {/* Navigation Links */}
-                <nav className="flex-1 px-4 space-y-1">
+                <nav className="flex-1 px-4 space-y-1 overflow-y-auto overflow-x-hidden">
                     {navItems.map((item) => {
                         const isActive = pathname === item.href || pathname.startsWith(item.href + "/");
                         return (
@@ -185,8 +193,8 @@ export default function Sidebar({
                                 <span className={`font-medium text-sm transition-opacity duration-200 ${isCollapsed ? "md:opacity-0 md:w-0 overflow-hidden" : "opacity-100"}`}>
                                     {item.name}
                                 </span>
-                                {(item as any).badge && !isCollapsed ? (
-                                    <span className="ml-auto text-xs">{(item as any).badge}</span>
+                                {item.badge && !isCollapsed ? (
+                                    <span className="ml-auto text-xs">{item.badge}</span>
                                 ) : isActive && !isCollapsed ? (
                                     <div className="ml-auto w-1.5 h-1.5 rounded-full bg-blue-500 shadow-[0_0_8px_rgba(59,130,246,0.8)] md:block hidden"></div>
                                 ) : null}
