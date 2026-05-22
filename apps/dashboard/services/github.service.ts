@@ -44,6 +44,16 @@ export async function getInstallationOctokit(installationId: number): Promise<Oc
     return new Octokit({ auth: installationAuth.token });
 }
 
+/**
+ * Get a raw installation token for external systems (e.g. Docker login)
+ */
+export async function getInstallationToken(installationId: number): Promise<string> {
+    const { appId, privateKey } = getAppConfig();
+    const auth = createAppAuth({ appId, privateKey });
+    const { token } = await auth({ type: 'installation', installationId });
+    return token;
+}
+
 // ─── Repo Listing ───────────────────────────────────────────
 
 /**
@@ -144,8 +154,8 @@ export async function createGitHubDeployment(params: GitHubCreateDeploymentParam
             return data.id;
         }
         return null;
-    } catch (error: any) {
-        console.error(`[GitHub] Failed to create deployment for ${repoFullName}@${ref}:`, error.message);
+    } catch (error: unknown) {
+        console.error(`[GitHub] Failed to create deployment for ${repoFullName}@${ref}:`, error instanceof Error ? error.message : String(error));
         return null;
     }
 }
@@ -181,8 +191,8 @@ export async function updateGitHubDeploymentStatus(params: GitHubUpdateDeploymen
             description,
             auto_inactive: true, // auto mark older deployments to this environment as inactive
         });
-    } catch (error: any) {
-        console.error(`[GitHub] Failed to update status ${deploymentId} to ${state}:`, error.message);
+    } catch (error: unknown) {
+        console.error(`[GitHub] Failed to update status ${deploymentId} to ${state}:`, error instanceof Error ? error.message : String(error));
     }
 }
 
@@ -209,7 +219,7 @@ export async function createPullRequestComment(params: GitHubCreateCommentParams
             issue_number: prNumber,
             body
         });
-    } catch (error: any) {
-        console.error(`[GitHub] Failed to create PR comment for ${repoFullName}#${prNumber}:`, error.message);
+    } catch (error: unknown) {
+        console.error(`[GitHub] Failed to create PR comment for ${repoFullName}#${prNumber}:`, error instanceof Error ? error.message : String(error));
     }
 }

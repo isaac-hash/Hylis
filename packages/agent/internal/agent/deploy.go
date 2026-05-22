@@ -27,6 +27,11 @@ type deployPayload struct {
 		DockerComposeFile string            `json:"dockerComposeFile"`
 		AnalyticsScript   string            `json:"analyticsScript"` // Pre-built <script> tag; empty = skip
 		SentryDsn         string            `json:"sentryDsn"`
+		RegistryAuth      *struct {
+			Registry string `json:"registry"`
+			Username string `json:"username"`
+			Password string `json:"password"`
+		} `json:"registryAuth,omitempty"`
 	} `json:"project"`
 	Domains []struct {
 		Hostname     string `json:"hostname"`
@@ -266,6 +271,20 @@ func (a *Agent) deployGHCR(releasePath, currentPath, containerName string, p *de
 	hostPort := findFreePort(3011)
 	containerPort := envOrDefault(p.Project.Env, "PORT", "3000")
 	envArgs := buildEnvArgs(p.Project.Env)
+
+	if p.Project.RegistryAuth != nil {
+		auth := p.Project.RegistryAuth
+		log(fmt.Sprintf("Authenticating with registry: %s\n", auth.Registry))
+		
+		cmd := fmt.Sprintf("echo '%s' | docker login %s -u '%s' --password-stdin", 
+			strings.ReplaceAll(auth.Password, "'", "'\\''"), 
+			auth.Registry, 
+			strings.ReplaceAll(auth.Username, "'", "'\\''"))
+			
+		if code := runStream(cmd, log); code != 0 {
+			return "", fmt.Errorf("docker login failed")
+		}
+	}
 
 	log(fmt.Sprintf("Pulling image: %s\n", image))
 	if code := runStream("docker pull "+image, log); code != 0 {

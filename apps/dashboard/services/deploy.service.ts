@@ -1,9 +1,8 @@
-/* eslint-disable no-console, @typescript-eslint/ban-ts-comment, @typescript-eslint/no-explicit-any */
-import { PrismaClient } from '@prisma/client';
+/* eslint-disable @typescript-eslint/ban-ts-comment, @typescript-eslint/no-explicit-any */
 // @ts-ignore - Local workspace package
-import { deploy, DeployOptions, ServerConfig, ProjectConfig, DeployResult } from '@hylius/core';
+import { deploy, ServerConfig, ProjectConfig, DeployResult, SSHClient, configureCaddy } from '@hylius/core';
 import { decrypt } from './crypto.service';
-import { getAuthenticatedCloneUrl, createGitHubDeployment, updateGitHubDeploymentStatus, createPullRequestComment } from './github.service';
+import { getAuthenticatedCloneUrl, createGitHubDeployment, updateGitHubDeploymentStatus, createPullRequestComment, getInstallationToken } from './github.service';
 import { agentGateway } from './agent-gateway.service';
 import { AlertService } from './alert.service';
 
@@ -112,7 +111,6 @@ async function _executeDeploymentInternal(options: DeployServiceOptions): Promis
     });
 
     // Overwrite the real-time globalIo broadcast above now that we have the deployment.id
-    const originalLog = enhancedLog;
     enhancedLog = (chunk: string) => {
         fullLogContent += chunk;
         if (onLog) onLog(chunk);
@@ -143,8 +141,10 @@ async function _executeDeploymentInternal(options: DeployServiceOptions): Promis
 
     // Determine repo URL — use authenticated clone URL for GitHub App repos
     let repoUrl = project.repoUrl;
+    let installationToken: string | undefined;
     if (project.githubInstallationId && project.githubRepoFullName) {
         try {
+            installationToken = await getInstallationToken(project.githubInstallationId);
             repoUrl = await getAuthenticatedCloneUrl(
                 project.githubInstallationId,
                 project.githubRepoFullName,
@@ -218,6 +218,11 @@ async function _executeDeploymentInternal(options: DeployServiceOptions): Promis
         containerName: (project as any).containerName || undefined,
         analyticsScript,
         sentryDsn,
+        registryAuth: installationToken ? {
+            registry: 'ghcr.io',
+            username: 'x-access-token',
+            password: installationToken
+        } : undefined,
     } as any;
 
     // Auto-inject URL environment variables
@@ -572,7 +577,7 @@ export async function destroyPreviewDeployment(projectId: string, prNumber: numb
                 try { privateKey = decrypt(project.server.privateKeyEncrypted, project.server.keyIv); } catch { }
             }
 
-            const { SSHClient, configureCaddy } = require('@hylius/core');
+
 
             const serverConfig = {
                 host: project.server.ip,

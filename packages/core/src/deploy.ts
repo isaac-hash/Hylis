@@ -518,6 +518,17 @@ export async function deploy(options: DeployOptions): Promise<DeployResult> {
             let pullError = '';
             for (let i = 1; i <= 3; i++) {
                 try {
+                    if (project.registryAuth) {
+                        const { registry, username, password } = project.registryAuth;
+                        log(`Authenticating with registry: ${registry}`);
+                        // Pass password via stdin to avoid exposing it in process lists
+                        await execOrThrow(
+                            client,
+                            `echo "${password.replace(/"/g, '\\"')}" | docker login ${registry} -u "${username.replace(/"/g, '\\"')}" --password-stdin`,
+                            'Docker login'
+                        );
+                    }
+                    
                     await execStreamOrThrow(client, `docker pull ${image}`, 'Docker pull', onLog);
                     pullSuccess = true;
                     break;

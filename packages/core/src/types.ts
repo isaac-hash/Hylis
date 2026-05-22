@@ -38,6 +38,13 @@ export interface ProjectConfig {
     dockerComposeYaml?: string; // For templates: raw yaml string to write to server
     analyticsScript?: string; // Pre-built <script> tag for traffic analytics tracking
     sentryDsn?: string; // Sentry DSN for error tracking
+    registryAuth?: RegistryAuth; // Authentication for private docker registries
+}
+
+export interface RegistryAuth {
+    registry: string;
+    username: string;
+    password: string;
 }
 
 export type TriggerSource = 'cli' | 'dashboard' | 'webhook';
