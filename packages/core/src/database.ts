@@ -41,6 +41,7 @@ const PORT_RANGES: Record<DatabaseEngine, { start: number; end: number; containe
     POSTGRES: { start: 5432, end: 5532, container: 5432 },
     MYSQL:    { start: 3306, end: 3406, container: 3306 },
     REDIS:    { start: 6379, end: 6479, container: 6379 },
+    MONGODB:  { start: 27017, end: 27117, container: 27017 },
 };
 
 // ─── Default Version per Engine ───────────────────────────────────────────────
@@ -49,6 +50,7 @@ const DEFAULT_VERSIONS: Record<DatabaseEngine, string> = {
     POSTGRES: '16',
     MYSQL:    '8',
     REDIS:    '7',
+    MONGODB:  '7',
 };
 
 // ─── Docker Image per Engine ──────────────────────────────────────────────────
@@ -58,6 +60,7 @@ function getDockerImage(engine: DatabaseEngine, version: string): string {
         case 'POSTGRES': return `postgres:${version}-alpine`;
         case 'MYSQL':    return `mysql:${version}`;
         case 'REDIS':    return `redis:${version}-alpine`;
+        case 'MONGODB':  return `mongo:${version}`;
     }
 }
 
@@ -78,6 +81,8 @@ function buildConnectionString(
             return `mysql://${dbUser}:${encodedPass}@localhost:${port}/${dbName}`;
         case 'REDIS':
             return `redis://:${encodedPass}@localhost:${port}`;
+        case 'MONGODB':
+            return `mongodb://${dbUser}:${encodedPass}@localhost:${port}/${dbName}?authSource=admin`;
     }
 }
 
@@ -217,6 +222,25 @@ export async function provisionDatabase(options: DatabaseProvisionOptions): Prom
                     `--health-retries=5`,
                     image,
                     `redis-server --requirepass '${password.replace(/'/g, "'\\''")}' --appendonly yes`,
+                ].join(' ');
+                break;
+
+            case 'MONGODB':
+                dockerRunCmd = [
+                    `docker run -d`,
+                    `--name ${containerName}`,
+                    `--network hylius`,
+                    `--restart unless-stopped`,
+                    `-e MONGO_INITDB_ROOT_USERNAME=${dbUser}`,
+                    `-e MONGO_INITDB_ROOT_PASSWORD='${password.replace(/'/g, "'\\''")}'`,
+                    `-e MONGO_INITDB_DATABASE=${dbName}`,
+                    `-p 127.0.0.1:${port}:${containerPort}`,
+                    `-v ${volumeName}:/data/db`,
+                    `--health-cmd="mongosh --eval 'db.runCommand({ping:1})' --quiet"`,
+                    `--health-interval=10s`,
+                    `--health-timeout=5s`,
+                    `--health-retries=5`,
+                    image,
                 ].join(' ');
                 break;
         }
@@ -391,6 +415,9 @@ export async function backupDatabase(options: DatabaseBackupOptions): Promise<Da
                 await new Promise(res => setTimeout(res, 2000));
                 backupCmd = `docker exec ${containerName} cat /data/dump.rdb | gzip > ${backupFile}`;
                 break;
+            case 'MONGODB':
+                backupCmd = `docker exec ${containerName} mongodump --username=${dbUser} --password='${password.replace(/'/g, "'\\''")}' --authenticationDatabase=admin --db=${dbName} --archive --gzip > ${backupFile}`;
+                break;
         }
 
         log(`Running backup for ${engine} database: ${dbName}`);
@@ -468,5 +495,7 @@ export function buildInternalDbConnectionString(
             return `mysql://${dbUser}:${encodedPass}@${containerName}:${port}/${dbName}`;
         case 'REDIS':
             return `redis://:${encodedPass}@${containerName}:${port}`;
+        case 'MONGODB':
+            return `mongodb://${dbUser}:${encodedPass}@${containerName}:${port}/${dbName}?authSource=admin`;
     }
 }

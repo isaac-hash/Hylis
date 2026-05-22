@@ -1,4 +1,3 @@
-/* eslint-disable @typescript-eslint/no-explicit-any */
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/services/prisma';
 import { createDatabase } from '@/services/database.service';
@@ -21,7 +20,7 @@ export async function GET(req: NextRequest) {
         return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
-    // @ts-ignore
+    // @ts-expect-error - Prisma type inference
     const databases = await prisma.database.findMany({
         where: { serverId },
         orderBy: { createdAt: 'desc' },
@@ -56,7 +55,7 @@ export async function POST(req: NextRequest) {
         return NextResponse.json({ error: 'serverId, engine, and name are required' }, { status: 400 });
     }
 
-    const validEngines = ['POSTGRES', 'MYSQL', 'REDIS'];
+    const validEngines = ['POSTGRES', 'MYSQL', 'REDIS', 'MONGODB'];
     if (!validEngines.includes(engine)) {
         return NextResponse.json({ error: `engine must be one of: ${validEngines.join(', ')}` }, { status: 400 });
     }

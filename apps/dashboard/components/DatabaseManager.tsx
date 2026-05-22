@@ -1,15 +1,13 @@
 'use client';
 
 import { useState, useEffect, useCallback, useRef } from 'react';
-import { useAuth } from '@/providers/auth.provider';
-import dynamic from 'next/dynamic';
 
 // ─── Types ─────────────────────────────────────────────────────────────────────
 
 interface DatabaseRecord {
     id: string;
     name: string;
-    engine: 'POSTGRES' | 'MYSQL' | 'REDIS';
+    engine: 'POSTGRES' | 'MYSQL' | 'REDIS' | 'MONGODB';
     version: string;
     status: 'PENDING' | 'PROVISIONING' | 'RUNNING' | 'STOPPED' | 'ERROR';
     containerName: string | null;
@@ -40,6 +38,7 @@ const ENGINE_META: Record<string, { label: string; icon: string; color: string; 
     POSTGRES: { label: 'PostgreSQL', icon: '🐘', color: 'text-blue-400', defaultVersion: '16', versions: ['16', '15', '14', '13'] },
     MYSQL:    { label: 'MySQL',      icon: '🐬', color: 'text-orange-400', defaultVersion: '8', versions: ['8', '8.0', '5.7'] },
     REDIS:    { label: 'Redis',      icon: '⚡', color: 'text-red-400', defaultVersion: '7', versions: ['7', '6', '5'] },
+    MONGODB:  { label: 'MongoDB',    icon: '🍃', color: 'text-green-400', defaultVersion: '7', versions: ['7', '6', '5'] },
 };
 
 const STATUS_STYLES: Record<string, { badge: string; dot: string }> = {
@@ -64,7 +63,7 @@ export default function DatabaseManager({ serverId, token, projects, organizatio
     const [deleteModal, setDeleteModal] = useState<{ db: DatabaseRecord; removeVolume: boolean } | null>(null);
 
     // ── Provision Modal State ──
-    const [provisionEngine, setProvisionEngine] = useState<'POSTGRES' | 'MYSQL' | 'REDIS'>('POSTGRES');
+    const [provisionEngine, setProvisionEngine] = useState<'POSTGRES' | 'MYSQL' | 'REDIS' | 'MONGODB'>('POSTGRES');
     const [provisionName, setProvisionName] = useState('');
     const [provisionVersion, setProvisionVersion] = useState('');
     const [provisionProjectId, setProvisionProjectId] = useState('');
@@ -170,8 +169,9 @@ export default function DatabaseManager({ serverId, token, projects, organizatio
             } else {
                 setBackupStatus(prev => ({ ...prev, [db.id]: `error:${data.error || 'Unknown error'}` }));
             }
-        } catch (e: any) {
-            setBackupStatus(prev => ({ ...prev, [db.id]: `error:${e.message}` }));
+        } catch (e: unknown) {
+            const msg = e instanceof Error ? e.message : 'Unknown error';
+            setBackupStatus(prev => ({ ...prev, [db.id]: `error:${msg}` }));
         }
     };
 
@@ -435,8 +435,8 @@ export default function DatabaseManager({ serverId, token, projects, organizatio
                             {/* Engine Selector */}
                             <div>
                                 <label className="block text-xs text-gray-400 uppercase tracking-wider mb-2">Engine</label>
-                                <div className="grid grid-cols-3 gap-2">
-                                    {(['POSTGRES', 'MYSQL', 'REDIS'] as const).map(eng => {
+                                <div className="grid grid-cols-4 gap-2">
+                                    {(['POSTGRES', 'MYSQL', 'REDIS', 'MONGODB'] as const).map(eng => {
                                         const m = ENGINE_META[eng];
                                         return (
                                             <button

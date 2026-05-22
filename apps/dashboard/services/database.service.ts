@@ -93,7 +93,12 @@ export function buildConnectionStringFromRecord(db: any, internal = false): stri
         );
 
         if (internal && db.containerName) {
-            const internalPort = db.engine === 'POSTGRES' ? 5432 : db.engine === 'MYSQL' ? 3306 : 6379;
+            const internalPort = {
+                POSTGRES: 5432,
+                MYSQL: 3306,
+                REDIS: 6379,
+                MONGODB: 27017,
+            }[db.engine as string] || 5432;
             return url.replace(`@localhost:${db.port}`, `@${db.containerName}:${internalPort}`);
         }
 
@@ -131,7 +136,7 @@ export async function createDatabase(options: CreateDatabaseOptions): Promise<{ 
         data: {
             name,
             engine,
-            version: version || { POSTGRES: '16', MYSQL: '8', REDIS: '7' }[engine] || 'latest',
+            version: version || { POSTGRES: '16', MYSQL: '8', REDIS: '7', MONGODB: '7' }[engine] || 'latest',
             status: 'PROVISIONING',
             passwordEncrypted: encrypted,
             passwordIv: iv,
@@ -386,7 +391,10 @@ async function injectDatabaseUrlIntoProject(
         try { envVars = JSON.parse(project.envVars as string); } catch {}
     }
 
-    const envKey = engine === 'REDIS' ? 'REDIS_URL' : 'DATABASE_URL';
+    const eng = engine as string;
+    const envKey = eng === 'REDIS' ? 'REDIS_URL'
+        : eng === 'MONGODB' ? 'MONGODB_URI'
+        : 'DATABASE_URL';
     envVars[envKey] = connectionString;
 
     await prisma.project.update({
@@ -404,7 +412,10 @@ async function removeDatabaseUrlFromProject(projectId: string, engine: DatabaseE
         try { envVars = JSON.parse(project.envVars as string); } catch {}
     }
 
-    const envKey = engine === 'REDIS' ? 'REDIS_URL' : 'DATABASE_URL';
+    const eng = engine as string;
+    const envKey = eng === 'REDIS' ? 'REDIS_URL'
+        : eng === 'MONGODB' ? 'MONGODB_URI'
+        : 'DATABASE_URL';
     delete envVars[envKey];
 
     await prisma.project.update({

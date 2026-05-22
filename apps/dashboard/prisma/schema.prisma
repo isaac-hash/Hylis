@@ -412,7 +412,7 @@ model PerformanceAudit {
 model Database {
   id                String       @id @default(cuid())
   name              String                          // User-friendly name, e.g. "my-app-db"
-  engine            String                          // "POSTGRES" | "MYSQL" | "REDIS"
+  engine            String                          // "POSTGRES" | "MYSQL" | "REDIS" | "MONGODB"
   version           String       @default("latest") // Docker tag, e.g. "16", "8", "7"
   status            String       @default("PENDING") // "PENDING" | "PROVISIONING" | "RUNNING" | "STOPPED" | "ERROR"
   containerName     String?                         // Docker container name on VPS
@@ -432,6 +432,8 @@ model Database {
   organization      Organization @relation(fields: [organizationId], references: [id])
   organizationId    String
 
+  metrics           DatabaseMetric[]
+
   createdAt         DateTime     @default(now())
   updatedAt         DateTime     @updatedAt
 
@@ -439,6 +441,23 @@ model Database {
   @@index([projectId])
   @@index([stackId])
   @@index([organizationId])
+}
+
+// ─── Database Metrics (Time-Series) ───────────────────────────────────────────
+
+model DatabaseMetric {
+  id               String   @id @default(cuid())
+  databaseId       String
+  database         Database @relation(fields: [databaseId], references: [id], onDelete: Cascade)
+
+  connections      Int      @default(0)    // Active connection count
+  queryThroughput  BigInt   @default(0)    // Cumulative query counter
+  slowQueryCount   Int      @default(0)    // Number of slow queries at sample time
+  sizeBytes        BigInt   @default(0)    // Total database size in bytes
+
+  createdAt        DateTime @default(now())
+
+  @@index([databaseId, createdAt])
 }
 
 // ─── Stacks (Multi-Service Groups) ────────────────────────────────────────────

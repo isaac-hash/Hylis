@@ -132,7 +132,7 @@ export interface ConfigureCaddyOptions {
 
 // ─── Database Management ─────────────────────────────────────────────────────
 
-export type DatabaseEngine = 'POSTGRES' | 'MYSQL' | 'REDIS';
+export type DatabaseEngine = 'POSTGRES' | 'MYSQL' | 'REDIS' | 'MONGODB';
 
 export interface DatabaseProvisionOptions {
     server: ServerConfig;
