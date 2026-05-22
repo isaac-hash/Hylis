@@ -201,6 +201,22 @@ async function _executeDeploymentInternal(options: DeployServiceOptions): Promis
         }
     }
 
+        let finalRegistryAuth: any = undefined;
+        if (project.githubInstallationId && envVars['GHCR_PAT']) {
+            finalRegistryAuth = {
+                registry: 'ghcr.io',
+                username: project.githubRepoFullName?.split('/')[0] || 'hylius',
+                password: envVars['GHCR_PAT']
+            };
+            log(`Authenticating to GHCR using provided GHCR_PAT from environment variables.\n`);
+        } else if (installationToken) {
+            finalRegistryAuth = {
+                registry: 'ghcr.io',
+                username: 'x-access-token',
+                password: installationToken
+            };
+        }
+
     const projectConfig: ProjectConfig = {
         name: project.name,
         repoUrl,
@@ -218,11 +234,7 @@ async function _executeDeploymentInternal(options: DeployServiceOptions): Promis
         containerName: (project as any).containerName || undefined,
         analyticsScript,
         sentryDsn,
-        registryAuth: installationToken ? {
-            registry: 'ghcr.io',
-            username: 'x-access-token',
-            password: installationToken
-        } : undefined,
+        registryAuth: finalRegistryAuth,
     } as any;
 
     // Auto-inject URL environment variables

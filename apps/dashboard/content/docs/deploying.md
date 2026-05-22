@@ -58,11 +58,11 @@ After answering, you'll see live server logs as your app builds and starts:
 
 Hylius selects a build strategy based on what exists in your project root:
 
-| Strategy | Trigger | Description |
-|----------|---------|-------------|
-| **Docker Compose** | `compose.yaml` exists | Runs `docker compose up -d --build` |
-| **Dockerfile** | `Dockerfile` exists (no compose) | Builds and runs a single container |
-| **Auto-generate** | Neither exists | Railpack detects your stack and generates Docker artifacts |
+| Strategy           | Trigger                          | Description                                                |
+| ------------------ | -------------------------------- | ---------------------------------------------------------- |
+| **Docker Compose** | `compose.yaml` exists            | Runs `docker compose up -d --build`                        |
+| **Dockerfile**     | `Dockerfile` exists (no compose) | Builds and runs a single container                         |
+| **Auto-generate**  | Neither exists                   | Railpack detects your stack and generates Docker artifacts |
 
 > [!TIP]
 > You don't need a `Dockerfile` to deploy. Hylius will detect your project type (Node.js, Python, PHP, Go, etc.) via Railpack and generate the right Docker configuration automatically.
@@ -80,11 +80,13 @@ hylius deploy
 ```
 
 Hylius will:
+
 1. Bundle your project (excluding `node_modules`, `.git`, `.next`, `dist`)
 2. Upload the archive over SSH (SFTP)
 3. Deploy from the uploaded bundle
 
 This is useful for:
+
 - Hot fixes that aren't committed yet
 - Deploying monorepo sub-packages
 - Testing before pushing to Git
@@ -114,19 +116,20 @@ Your `compose.yaml` or `Dockerfile` should then reference it with `env_file: .en
 
 When the `CI` or `GITHUB_ACTIONS` environment variable is set, `hylius deploy` requires no prompts and reads config from env vars:
 
-| Variable | Description | Required |
-|----------|-------------|----------|
-| `HYLIUS_HOST` | VPS IP address | Yes |
-| `HYLIUS_REPO_URL` | Git URL to clone on the server | Yes |
-| `HYLIUS_TARGET_PATH` | Remote path to deploy into | Yes |
-| `HYLIUS_USER` | SSH username | No (defaults to `root`) |
-| `HYLIUS_PORT` | SSH port | No (defaults to `22`) |
-| `HYLIUS_SSH_KEY` | Full SSH private key content | Auth required |
-| `HYLIUS_SSH_KEY_PATH` | Path to private key file | Auth required |
-| `HYLIUS_PASSWORD` | SSH password | Auth required |
-| `HYLIUS_BRANCH` | Git branch to clone | No (defaults to `main`) |
-| `HYLIUS_BUILD_COMMAND` | Build command | No (defaults to `npm run build`) |
-| `HYLIUS_START_COMMAND` | Start command | No (defaults to PM2) |
+| Variable               | Description                    | Required                         |
+| ---------------------- | ------------------------------ | -------------------------------- |
+| `HYLIUS_HOST`          | VPS IP address                 | Yes                              |
+| `HYLIUS_REPO_URL`      | Git URL to clone on the server | Yes                              |
+| `HYLIUS_TARGET_PATH`   | Remote path to deploy into     | Yes                              |
+| `HYLIUS_USER`          | SSH username                   | No (defaults to `root`)          |
+| `HYLIUS_PORT`          | SSH port                       | No (defaults to `22`)            |
+| `HYLIUS_SSH_KEY`       | Full SSH private key content   | Auth required                    |
+| `HYLIUS_SSH_KEY_PATH`  | Path to private key file       | Auth required                    |
+| `HYLIUS_PASSWORD`      | SSH password                   | Auth required                    |
+| `GHCR_PAT`             | GitHub Container Registry Token| Optional                         |
+| `HYLIUS_BRANCH`        | Git branch to clone            | No (defaults to `main`)          |
+| `HYLIUS_BUILD_COMMAND` | Build command                  | No (defaults to `npm run build`) |
+| `HYLIUS_START_COMMAND` | Start command                  | No (defaults to PM2)             |
 
 ### Example `.env` for CI testing:
 
@@ -150,7 +153,7 @@ Make sure your app listens on `0.0.0.0` and not `localhost`:
 // next.config.js — no change needed, Next.js binds correctly by default
 
 // For custom express/node servers:
-app.listen(3000, '0.0.0.0');
+app.listen(3000, "0.0.0.0");
 ```
 
 ### Python / FastAPI
