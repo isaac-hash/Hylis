@@ -663,7 +663,7 @@ func extractPortFromDockerPS(output string) string {
 
 func findFreePort(start int) string {
 	for p := start; p <= 3100; p++ {
-		out, _ := exec.Command("bash", "-c",
+		out, _ := exec.Command("bash", "-l", "-c",
 			fmt.Sprintf("docker ps --format '{{.Ports}}' | grep -q ':%d->' || echo FREE", p),
 		).Output()
 		if strings.TrimSpace(string(out)) == "FREE" {
@@ -674,7 +674,7 @@ func findFreePort(start int) string {
 }
 
 func runLocal(cmd string, log func(string)) int {
-	c := exec.Command("bash", "-c", cmd)
+	c := exec.Command("bash", "-l", "-c", cmd)
 	if err := c.Run(); err != nil {
 		if exitErr, ok := err.(*exec.ExitError); ok {
 			return exitErr.ExitCode()
@@ -685,7 +685,7 @@ func runLocal(cmd string, log func(string)) int {
 }
 
 func runStream(cmd string, log func(string)) int {
-	c := exec.Command("bash", "-c", cmd)
+	c := exec.Command("bash", "-l", "-c", cmd)
 	c.Stdout = &logWriter{log: log}
 	c.Stderr = &logWriter{log: log}
 	if err := c.Run(); err != nil {

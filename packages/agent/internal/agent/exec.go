@@ -18,7 +18,7 @@ func (a *Agent) handleExec(msg Message) {
 		return
 	}
 
-	cmd := exec.Command("bash", "-c", p.Cmd)
+	cmd := exec.Command("bash", "-l", "-c", p.Cmd)
 	stdout, _ := cmd.StdoutPipe()
 	stderr, _ := cmd.StderrPipe()
 

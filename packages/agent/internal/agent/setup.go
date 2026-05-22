@@ -259,7 +259,7 @@ func findFreePortInRange(start, end int) int {
 }
 
 func execShellOutput(cmd string) (string, error) {
-	out, err := exec.Command("bash", "-c", cmd).Output()
+	out, err := exec.Command("bash", "-l", "-c", cmd).Output()
 	return string(out), err
 }
 
