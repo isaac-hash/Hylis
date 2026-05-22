@@ -20,7 +20,6 @@ export async function GET(req: NextRequest) {
         return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
-    // @ts-expect-error - Prisma type inference
     const databases = await prisma.database.findMany({
         where: { serverId },
         orderBy: { createdAt: 'desc' },
