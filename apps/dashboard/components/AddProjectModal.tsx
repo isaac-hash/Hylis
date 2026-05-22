@@ -34,13 +34,9 @@ interface Database {
 
 type WizardStep = 'connect' | 'configure' | 'envVars' | 'database' | 'review';
 const STEPS: WizardStep[] = ['connect', 'configure', 'envVars', 'database', 'review'];
-const STEP_LABELS: Record<WizardStep, string> = {
-    connect: 'Connect Repo',
-    configure: 'Configure Build',
-    envVars: 'Environment Variables',
-    database: 'Database',
-    review: 'Review & Deploy',
-};
+
+type DeployStrategy = 'auto' | 'pm2' | 'docker-compose' | 'dockerfile' | 'railpack' | 'nixpacks' | 'ghcr-pull' | 'compose-registry' | 'compose-server' | 'dagger';
+type DbEngine = 'POSTGRES' | 'MYSQL' | 'REDIS';
 
 export default function AddProjectModal({ isOpen, onClose, serverId, serverName, onAdded }: AddProjectModalProps) {
     const { token } = useAuth();
@@ -62,14 +58,14 @@ export default function AddProjectModal({ isOpen, onClose, serverId, serverName,
         startCommand: '',
     });
     const [githubMeta, setGithubMeta] = useState<{ repoFullName: string; installationId: number } | null>(null);
-    const [deployStrategy, setDeployStrategy] = useState<'auto' | 'pm2' | 'docker-compose' | 'dockerfile' | 'railpack' | 'nixpacks' | 'ghcr-pull' | 'compose-registry' | 'compose-server' | 'dagger'>('dagger');
+    const [deployStrategy, setDeployStrategy] = useState<DeployStrategy>('dagger');
 
     // Env Vars State
     const [envVars, setEnvVars] = useState<Array<{key: string, value: string}>>([{key: '', value: ''}]);
 
     // Database State
     const [dbOption, setDbOption] = useState<'none' | 'new' | 'existing'>('none');
-    const [newDbEngine, setNewDbEngine] = useState<'POSTGRES' | 'MYSQL' | 'REDIS'>('POSTGRES');
+    const [newDbEngine, setNewDbEngine] = useState<DbEngine>('POSTGRES');
     const [newDbName, setNewDbName] = useState('');
     const [selectedDbId, setSelectedDbId] = useState('');
     const [existingDatabases, setExistingDatabases] = useState<Database[]>([]);
@@ -88,6 +84,7 @@ export default function AddProjectModal({ isOpen, onClose, serverId, serverName,
         } else {
             resetState();
         }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [isOpen]);
 
     function resetState() {
@@ -133,7 +130,7 @@ export default function AddProjectModal({ isOpen, onClose, serverId, serverName,
             const res = await fetch(`/api/databases?serverId=${serverId}`, { headers: { Authorization: `Bearer ${token}` } });
             const data = await res.json();
             // Only show databases not attached to a stack
-            setExistingDatabases((data || []).filter((d: any) => !d.stackId));
+            setExistingDatabases((data || []).filter((d: Database) => !('stackId' in d) || !(d as Database & { stackId?: string }).stackId));
         } catch {
             // Ignore silently
         }
@@ -176,11 +173,67 @@ export default function AddProjectModal({ isOpen, onClose, serverId, serverName,
     const addEnvVar = () => setEnvVars([...envVars, {key: '', value: ''}]);
     const removeEnvVar = (index: number) => setEnvVars(envVars.filter((_, i) => i !== index));
 
+    // Bulk .env paste support
+    const [showBulkPaste, setShowBulkPaste] = useState(false);
+    const [bulkText, setBulkText] = useState('');
+
+    function parseEnvText(text: string): Array<{key: string, value: string}> {
+        const parsed: Array<{key: string, value: string}> = [];
+        for (const line of text.split('\n')) {
+            const trimmed = line.trim();
+            if (!trimmed || trimmed.startsWith('#')) continue;
+            const eq = trimmed.indexOf('=');
+            if (eq < 1) continue;
+            const key = trimmed.slice(0, eq).trim();
+            const value = trimmed.slice(eq + 1).trim().replace(/^["']|["']$/g, '');
+            parsed.push({ key, value });
+        }
+        return parsed;
+    }
+
+    function applyBulkPaste() {
+        const parsed = parseEnvText(bulkText);
+        if (parsed.length === 0) return;
+        setEnvVars(prev => {
+            const existing = prev.filter(r => r.key.trim());
+            const merged = [...existing];
+            for (const p of parsed) {
+                const idx = merged.findIndex(r => r.key === p.key);
+                if (idx >= 0) merged[idx] = p;
+                else merged.push(p);
+            }
+            return merged;
+        });
+        setBulkText('');
+        setShowBulkPaste(false);
+    }
+
+    function handleValuePaste(e: React.ClipboardEvent<HTMLInputElement>) {
+        const text = e.clipboardData.getData('text');
+        const isBulk = text.includes('\n') && text.includes('=');
+        const isSingleAssignment = /^[A-Z_][A-Z0-9_]*\s*=/.test(text.trim());
+        if (!isBulk && !isSingleAssignment) return;
+        e.preventDefault();
+        const parsed = parseEnvText(text);
+        if (parsed.length > 0) {
+            setEnvVars(prev => {
+                const existing = prev.filter(r => r.key.trim());
+                const merged = [...existing];
+                for (const p of parsed) {
+                    const idx = merged.findIndex(r => r.key === p.key);
+                    if (idx >= 0) merged[idx] = p;
+                    else merged.push(p);
+                }
+                return merged;
+            });
+        }
+    }
+
     const handleFinalSubmit = async () => {
         setError('');
         setIsCreating(true);
 
-        const prog: any[] = [
+        const prog: { step: string; status: 'pending' | 'active' | 'done' | 'error'; message: string }[] = [
             { step: 'project', status: 'active', message: 'Creating project...' }
         ];
         
@@ -284,7 +337,7 @@ export default function AddProjectModal({ isOpen, onClose, serverId, serverName,
                 }
             }
 
-            let successData: any = undefined;
+            let successData: { token: string; webhookUrl: string; prUrl?: string | null } | undefined = undefined;
             if (deployStrategy === 'dagger' || deployStrategy === 'ghcr-pull' || deployStrategy === 'compose-registry') {
                 successData = {
                     token: deployToken,
@@ -540,7 +593,7 @@ export default function AddProjectModal({ isOpen, onClose, serverId, serverName,
                                 </div>
                                 <div className="space-y-1.5">
                                     <label className="text-sm font-medium text-gray-300">Deployment Strategy</label>
-                                    <select value={deployStrategy} onChange={(e) => setDeployStrategy(e.target.value as any)} className="w-full bg-black/50 border border-gray-700 rounded-lg px-3.5 py-2.5 text-white text-sm focus:border-blue-500 focus:ring-1 focus:ring-blue-500 outline-none transition-all">
+                                    <select value={deployStrategy} onChange={(e) => setDeployStrategy(e.target.value as DeployStrategy)} className="w-full bg-black/50 border border-gray-700 rounded-lg px-3.5 py-2.5 text-white text-sm focus:border-blue-500 focus:ring-1 focus:ring-blue-500 outline-none transition-all">
                                         <option value="auto">Auto-detect Build Strategy</option>
                                         <option value="dagger">⚡ Dagger (GitHub Actions)</option>
                                         <option value="nixpacks">Nixpacks</option>
@@ -573,6 +626,59 @@ export default function AddProjectModal({ isOpen, onClose, serverId, serverName,
                                 <p className="text-gray-400 text-sm">Add any required secrets or configuration. These will be injected securely at build and runtime.</p>
                             </div>
 
+                            {/* Bulk paste toggle */}
+                            <div className="flex items-center gap-2">
+                                <button
+                                    onClick={() => setShowBulkPaste(!showBulkPaste)}
+                                    className={`text-xs font-medium flex items-center gap-1.5 px-3 py-1.5 rounded-lg border transition-all ${
+                                        showBulkPaste
+                                            ? 'bg-violet-600/20 border-violet-500/30 text-violet-400'
+                                            : 'bg-white/[0.03] border-white/[0.06] text-gray-400 hover:text-white hover:border-white/[0.12]'
+                                    }`}
+                                >
+                                    <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" />
+                                    </svg>
+                                    Paste .env
+                                </button>
+                                <span className="text-[11px] text-gray-600">or paste into any value field</span>
+                            </div>
+
+                            {/* Bulk paste textarea */}
+                            {showBulkPaste && (
+                                <div className="bg-black/50 border border-violet-500/20 rounded-xl p-4 space-y-3 animate-in fade-in">
+                                    <p className="text-xs text-gray-400">Paste your <code className="text-violet-400">.env</code> file contents below. Lines starting with <code className="text-gray-500">#</code> will be skipped.</p>
+                                    <textarea
+                                        value={bulkText}
+                                        onChange={e => setBulkText(e.target.value)}
+                                        placeholder={`DATABASE_URL=postgres://user:pass@localhost:5432/db\nREDIS_URL=redis://localhost:6379\nSECRET_KEY=my-secret-key`}
+                                        rows={6}
+                                        className="w-full bg-gray-900/80 border border-gray-700 rounded-lg px-3 py-2.5 text-white text-sm font-mono placeholder-gray-600 focus:border-violet-500 focus:ring-1 focus:ring-violet-500 outline-none transition-all resize-none"
+                                        autoFocus
+                                    />
+                                    <div className="flex items-center justify-between">
+                                        <p className="text-[11px] text-gray-600">
+                                            {bulkText.trim() ? `${parseEnvText(bulkText).length} variable(s) detected` : 'Waiting for paste...'}
+                                        </p>
+                                        <div className="flex gap-2">
+                                            <button
+                                                onClick={() => { setBulkText(''); setShowBulkPaste(false); }}
+                                                className="px-3 py-1.5 text-xs text-gray-400 hover:text-white border border-gray-700 rounded-lg transition-colors"
+                                            >
+                                                Cancel
+                                            </button>
+                                            <button
+                                                onClick={applyBulkPaste}
+                                                disabled={parseEnvText(bulkText).length === 0}
+                                                className="px-4 py-1.5 text-xs font-semibold bg-violet-600/20 border border-violet-500/30 text-violet-400 rounded-lg hover:bg-violet-600/30 transition-all disabled:opacity-40 disabled:cursor-not-allowed"
+                                            >
+                                                Import {parseEnvText(bulkText).length} variable{parseEnvText(bulkText).length !== 1 ? 's' : ''}
+                                            </button>
+                                        </div>
+                                    </div>
+                                </div>
+                            )}
+
                             {envVars.map((env, i) => (
                                 <div key={i} className="flex gap-3 items-start animate-in fade-in">
                                     <div className="flex-1">
@@ -590,6 +696,7 @@ export default function AddProjectModal({ isOpen, onClose, serverId, serverName,
                                             placeholder="postgres://user:pass@localhost:5432/db"
                                             value={env.value}
                                             onChange={e => handleEnvVarChange(i, 'value', e.target.value)}
+                                            onPaste={handleValuePaste}
                                             className="w-full bg-black/50 border border-gray-700 rounded-lg px-3 py-2 text-white text-sm font-mono placeholder-gray-600 focus:border-blue-500 focus:ring-1 focus:ring-blue-500 outline-none transition-all"
                                         />
                                     </div>
@@ -622,7 +729,7 @@ export default function AddProjectModal({ isOpen, onClose, serverId, serverName,
                                         <input type="radio" checked={dbOption === 'none'} onChange={() => setDbOption('none')} className="w-4 h-4 text-blue-600 focus:ring-blue-600 focus:ring-offset-gray-900 bg-gray-700 border-gray-600" />
                                         <span className="font-medium text-white">Skip</span>
                                     </div>
-                                    <p className="text-xs text-gray-500 pl-7">I don't need a database or I will configure it later.</p>
+                                    <p className="text-xs text-gray-500 pl-7">I don&apos;t need a database or I will configure it later.</p>
                                 </label>
                                 <label className={`cursor-pointer rounded-xl border p-4 transition-all ${dbOption === 'new' ? 'border-blue-500 bg-blue-500/10' : 'border-gray-800 bg-black/20 hover:border-gray-600'}`}>
                                     <div className="flex items-center gap-3 mb-2">
@@ -645,7 +752,7 @@ export default function AddProjectModal({ isOpen, onClose, serverId, serverName,
                                     <div className="grid grid-cols-2 gap-4">
                                         <div className="space-y-1.5">
                                             <label className="text-sm font-medium text-gray-400">Database Engine</label>
-                                            <select value={newDbEngine} onChange={e => setNewDbEngine(e.target.value as any)} className="w-full bg-black border border-gray-700 rounded-lg p-2.5 text-white text-sm focus:border-blue-500 outline-none transition-colors">
+                                            <select value={newDbEngine} onChange={e => setNewDbEngine(e.target.value as DbEngine)} className="w-full bg-black border border-gray-700 rounded-lg p-2.5 text-white text-sm focus:border-blue-500 outline-none transition-colors">
                                                 <option value="POSTGRES">PostgreSQL</option>
                                                 <option value="MYSQL">MySQL</option>
                                                 <option value="REDIS">Redis</option>

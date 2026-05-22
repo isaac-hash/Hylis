@@ -388,7 +388,59 @@ app.prepare().then(() => {
             }
         });
 
+        // ─── watch-db-metrics: poll database metrics every 30s ─────────────
+        const activeDbMetricStreams = new Map<string, NodeJS.Timeout>();
+
+        socket.on('watch-db-metrics', async (data: { databaseId: string }) => {
+            const { databaseId } = data;
+
+            if (activeDbMetricStreams.has(databaseId)) {
+                return; // Already watching
+            }
+
+            try {
+                const { collectMetrics } = await import('./services/database-metrics.service');
+
+                // Collect immediately and send first snapshot
+                try {
+                    const snapshot = await collectMetrics(databaseId);
+                    socket.emit(`db_metrics:${databaseId}`, snapshot);
+                } catch (err: any) {
+                    socket.emit(`db_metrics_error:${databaseId}`, err.message);
+                }
+
+                // Start polling every 30 seconds
+                const interval = setInterval(async () => {
+                    try {
+                        const snapshot = await collectMetrics(databaseId);
+                        socket.emit(`db_metrics:${databaseId}`, snapshot);
+                    } catch (err: any) {
+                        socket.emit(`db_metrics_error:${databaseId}`, err.message);
+                    }
+                }, 30000);
+
+                activeDbMetricStreams.set(databaseId, interval);
+            } catch (err: any) {
+                console.error('[watch-db-metrics] error:', err);
+                socket.emit(`db_metrics_error:${databaseId}`, err.message || 'Failed to start metrics');
+            }
+        });
+
+        socket.on('unwatch-db-metrics', (data: { databaseId: string }) => {
+            const { databaseId } = data;
+            const interval = activeDbMetricStreams.get(databaseId);
+            if (interval) {
+                clearInterval(interval);
+                activeDbMetricStreams.delete(databaseId);
+            }
+        });
+
         socket.on('disconnect', () => {
+            // Clean up any active db metric streams for this socket
+            for (const [, interval] of activeDbMetricStreams) {
+                clearInterval(interval);
+            }
+            activeDbMetricStreams.clear();
             console.log('Client disconnected:', socket.id);
         });
     });
@@ -416,5 +468,31 @@ app.prepare().then(() => {
         .listen(port, () => {
             console.log(`> Ready on http://${hostname}:${port}`);
             console.log(`> Agent Gateway listening on ws://${hostname}:${port}/agent-ws`);
+
+            // ─── Database Metrics Cron ─────────────────────────────────────
+            // Collect metrics for all running databases every 5 minutes
+            const DB_METRICS_INTERVAL = 5 * 60 * 1000; // 5 minutes
+            const DB_PRUNE_INTERVAL = 24 * 60 * 60 * 1000; // 24 hours
+
+            setInterval(async () => {
+                try {
+                    const { collectAllMetrics } = await import('./services/database-metrics.service');
+                    await collectAllMetrics();
+                } catch (err: any) {
+                    console.error('[cron:db-metrics] Collection failed:', err.message);
+                }
+            }, DB_METRICS_INTERVAL);
+
+            // Prune old metrics once a day
+            setInterval(async () => {
+                try {
+                    const { pruneOldMetrics } = await import('./services/database-metrics.service');
+                    await pruneOldMetrics(7); // Keep 7 days
+                } catch (err: any) {
+                    console.error('[cron:db-metrics] Prune failed:', err.message);
+                }
+            }, DB_PRUNE_INTERVAL);
+
+            console.log(`> Database metrics cron started (every ${DB_METRICS_INTERVAL / 1000}s)`);
         });
 });
